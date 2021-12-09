@@ -27,6 +27,7 @@ class layer {
 
 public:
 	layer(double kkappa);
+	layer(double kkappa, const std::vector<double>& mmu, const std::vector<double>& rrho);
 
 	double defOnTop(std::complex<double> alpha) const;
 	double findRoot(double a, double b, const std::function<double(double)>& f, double epsilon = 0.1e-6) const;

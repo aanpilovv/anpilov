@@ -1,7 +1,5 @@
 #include "Layer.h"
 
-#include <complex.h>
-
 const std::complex<double> im = { 0,1 };
 
 std::vector<std::function<std::complex<double>(double, const std::vector<std::complex<double>>&)>> layer::get_equation(std::complex<double> alpha, size_t size) const
@@ -14,10 +12,10 @@ std::vector<std::function<std::complex<double>(double, const std::vector<std::co
 	return result;
 }
 
-layer::layer(double kkappa) : mu(Parameters::smooth_params[0]), rho(Parameters::smooth_params[1])
-{
-	kappa = kkappa;
-	_equations = {
+std::vector<std::function<std::complex<double>(double, const std::vector<std::complex<double>>&,std::complex<double>, double)>> equations(const std::function<double(double)>& mu,
+	const std::function<double(double)>& rho) {
+	return 
+	{
 		[=](double x, const std::vector<std::complex<double>>& v, std::complex<double> alpha, double kappa)
 		{
 			return v[1] / mu(x);
@@ -43,6 +41,54 @@ layer::layer(double kkappa) : mu(Parameters::smooth_params[0]), rho(Parameters::
 			return 2.0 * v[0] * mu(x) + 4.0 * v[2] * mu(x) * alpha + (alpha * alpha * mu(x) - kappa * kappa * rho(x)) * v[4];//!!!
 		}
 	};
+}
+
+
+// ещё один конструктор (он будет принимать еще два вектора, менать std::vector<std::vector<double>> piecewise_linear_params; и 
+// в качестве mu и rho устанавливает Parameters::evaluate(t, 0) и Parameters::evaluate(t, 1);)
+layer::layer(double kkappa) : mu(Parameters::smooth_params[0]), rho(Parameters::smooth_params[1])
+{
+	kappa = kkappa;
+	_equations = equations(mu, rho);/* {
+		[=](double x, const std::vector<std::complex<double>>& v, std::complex<double> alpha, double kappa)
+		{
+			return v[1] / mu(x);
+		},
+		[=](double x, const std::vector<std::complex<double>>& v, std::complex<double> alpha, double kappa)
+		{
+			return (alpha * alpha * mu(x) - kappa * kappa * rho(x)) * v[0];
+		},
+		[=](double x, const std::vector<std::complex<double>>& v, std::complex<double> alpha, double kappa)
+		{
+			return v[3] / mu(x);
+		},
+		[=](double x, const std::vector<std::complex<double>>& v, std::complex<double> alpha, double kappa)
+		{
+			return 2.0 * alpha * v[0] * mu(x) + (alpha * alpha * mu(x) - kappa * kappa * rho(x)) * v[2];
+		},
+		[=](double x, const std::vector<std::complex<double>>& v, std::complex<double> alpha, double kappa)
+		{
+			return v[5] / mu(x);
+		},
+		[=](double x, const std::vector<std::complex<double>>& v, std::complex<double> alpha, double kappa)
+		{
+			return 2.0 * v[0] * mu(x) + 4.0 * v[2] * mu(x) * alpha + (alpha * alpha * mu(x) - kappa * kappa * rho(x)) * v[4];//!!!
+		}
+	};*/
+	roots = getRoots();
+	residual_set = residualSet();
+}
+
+layer::layer(double kkappa, const std::vector<double>& mmu, const std::vector<double>& rrho) : mu(Parameters::smooth_params[0]), rho(Parameters::smooth_params[1])
+{
+	Parameters::kind = THIRD;
+	Parameters::piecewise_linear_params.resize(2);
+	Parameters::piecewise_linear_params[0] = mmu;
+	Parameters::piecewise_linear_params[1] = rrho;
+	this->mu = [](double t) {return Parameters::evaluate(t, 0);};
+	this->rho = [](double t) {return Parameters::evaluate(t, 1);};
+	kappa = kkappa;
+	_equations = equations(mu, rho);
 	roots = getRoots();
 	residual_set = residualSet();
 }
@@ -131,8 +177,8 @@ std::vector<std::complex<double>> layer::residualSet()
 std::vector<std::vector<double>> layer::MatrixRho(size_t columns, size_t rows) const
 {
 	const auto h = 1.0 / columns;
-	std::vector<double> points_x2(rows); // значения x_2
-	std::vector<double> points_xi(columns); // значения \xi
+	std::vector<double> points_x2(rows);
+	std::vector<double> points_xi(columns);
 	std::vector<std::complex<double>> residuals;
 	for (size_t i = 0; i < rows; i++) {
 		points_x2[i] = (i + 0.5) / rows;
@@ -152,8 +198,7 @@ std::vector<std::vector<double>> layer::MatrixRho(size_t columns, size_t rows) c
 			for (size_t iii = 0; iii < columns; iii++)
 			{
 				std::complex<double> multiplier = exp(points_xi[iii] * im * root);
-				const auto item = im * (2.0 * solution[ii][0] * (solution[ii][2] - solution[ii][0] * 0.5 * denum[5] / denum[3])
-					+ im * solution[ii][0] * solution[ii][0] * points_xi[iii]) / denum[3] / denum[3];
+				const auto item = im * (2.0 * solution[ii][0] * (solution[ii][2] - solution[ii][0] * 0.5 * denum[5] / denum[3]) + im * solution[ii][0] * solution[ii][0] * points_xi[iii]) / denum[3] / denum[3];
 				result[iii][ii] += item * multiplier;
 			}
 		}
@@ -204,17 +249,17 @@ std::vector<std::vector<double>> layer::MatrixMu(size_t columns, size_t rows)
 			}
 		}
 	}
+
 	std::vector<std::vector<double>> realresult(columns, std::vector<double>(rows));
 	for (size_t i = 0; i < columns; i++)
 	{
 		for (size_t j = 0; j < rows; j++)
 		{
-			realresult[i][j] = result[i][j].real() / columns;
+			realresult[i][j] += result[i][j].real() / columns;
 		}
 	}
 	return realresult;
 }
-
 
 std::vector<std::complex<double>> layer::getRoots()
 {

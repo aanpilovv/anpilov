@@ -138,6 +138,20 @@ void plotTheWaveField(const std::map<double, std::complex<double>>& waveField, c
 	os << "\\end{tikzpicture}\n";
 	os.close();
 }
+
+void RecFile(vector<double> x, vector<double> y, string fileName) {
+	std::ofstream os(fileName);
+	os << "\\begin{tikzpicture}[scale=1.5]\n";
+	os << "\\begin{axis}[grid]\n";
+	os << "\\addplot[smooth, red] plot coordinates{\n";
+	for (size_t i = 0;i < x.size();i++) {
+		os << "(" << x[i] << ", " << y[i] << ") ";
+	}
+	os << "};\n";
+	os << "\\end{tikzpicture}\n";
+	os.close();
+}
+
 /*
 std::vector<std::complex<double>> reconstructed(const std::vector<double>& parameters,
 	const std::vector<double>& points, double kappa)
@@ -170,7 +184,7 @@ double fitness(const std::vector<double>& parameters,
 	double res = 0;
 	if (points.size() != observ.size())
 	{
-		throw std::invalid_argument("������������� �����");
+		throw std::invalid_argument("                   ");
 	}
 	auto res1 = reconstructed(parameters, points, kappa);
 	for (size_t i = 0; i < points.size(); i++) {
@@ -259,14 +273,25 @@ void display(const std::vector<T>& vector) {
 int main()
 {
 	setlocale(0, "");
-	double kappa = 1.0;
-	double rho0 = 1;
-	const size_t rows = 20;
-	double columns = 20;
+	/*
+	//initiliazing genetic algorithm
+	galgo::GeneticAlgorithm<double> ga(MyObjective<double>::Objective, 100, LB, UB, 50, true);
+
+	//setting constraints
+	ga.Constraint = MyConstraint;
+
+	//running genetic algorithm
+	ga.run();
+
+	*/
+
+	double kappa = 4.0;
+	const size_t rows = 30;
+	double columns = 30;
 	double c = 0;
 	double d = 1;
 	std::vector<double> points;
-	for (size_t k = 0; k < rows; k++) {
+	for (int k = 0; k < rows; k++) {
 		points.push_back(c + k * (d - c) / rows);
 	}
 
@@ -276,33 +301,58 @@ int main()
 	layer l(kappa);
 	auto field1 = l.observed(points);
 
+
 	Parameters::smooth_params[0] = [](double x) {return 1; };
 	Parameters::smooth_params[1] = [](double x) {return 1; };
-
-
 	layer l1(kappa);
 	auto field2 = l1.observed(points);
-	auto mat = l1.MatrixMu(columns, rows);
+	auto mat = l1.MatrixRho(columns, rows);
 
-	/*std::vector<double> field = field1 - field2;
-
+	std::vector<double> field = field1 - field2;
+	
 	std::vector<double> exact_solution(points.size());
 	const double h_y = 1.0 / points.size();
 	for (size_t i = 0; i < points.size(); i++)
 	{
-		double x = i * h_y;// *0.01;
+		double x = i * h_y;
 		exact_solution[i] = 0.1 * x;
 	}
 	auto right_part = mat * exact_solution;
 	display(right_part);
+	std::cout << "\n";
 	display(field);
-	/*
-	VoyevodinMethod V = { mat, field, 1.0 / field.size(), Dirichle };
+
+
+	//VoyevodinMethod V = { mat, field, 1.0 / field.size(), Dirichle };
+	VoyevodinMethod V = { mat, field, 1.0 / field.size() };
 	auto solution = V.solution();
 	for (size_t i = 0; i < solution.size(); i++)
 	{
 		std::cout << solution[i] << std::endl;
-	}*/
+	}
+	vector<double> points_x2(rows);
+	for (size_t i = 1; i < rows; i++) {
+		points_x2[i] = (i + 0.5) / rows;
+	}
+	points_x2.push_back(1.0);
+
+	///RecFile(points_x2, solution, "mu.txt");
+	plotTheWaveField({ {"black", right_part},{"red", field} }, "wf.txt", 1.0 / rows);
+
+	plotTheWaveField({ {"black", exact_solution},{"red", solution} }, "mu.txt", (d-c)/rows);
+	std::vector<double> rho0(rows, 1.0);
+	for (size_t i = 0; i < rows; i++)
+	{
+		rho0[i] += solution[i];
+	}
+	layer l2(kappa, std::vector<double>(rows, 1.0), rho0);
+	auto field3 = l2.observed(points);
+	mat = l2.MatrixRho(columns, rows);
+	field = field1 - field3;
+
+	VoyevodinMethod VV = { mat, field, 1.0 / field.size() };
+	solution = VV.solution();
+
 	system("pause");
 	return 0;
 }
